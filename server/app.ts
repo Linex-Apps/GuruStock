@@ -8,6 +8,7 @@ import { handleTrades } from "./routes/trades";
 import { handleAdmin } from "./routes/admin";
 import { handleSubscription } from "./routes/subscription";
 import { handleUser } from "./routes/user";
+import { handleScoreboard } from "./routes/scoreboard";
 import { ingestAllGurus } from "./lib/ingest";
 
 // CORS headers for development
@@ -76,6 +77,12 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     }
     if (path.startsWith("/api/portfolio")) {
       const inner = await handlePortfolio(req);
+      return corsResponse(await inner.text(), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (path.startsWith("/api/scoreboard")) {
+      const inner = await handleScoreboard(req);
       return corsResponse(await inner.text(), {
         headers: { "Content-Type": "application/json" },
       });

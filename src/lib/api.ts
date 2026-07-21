@@ -139,6 +139,11 @@ export const api = {
       features: SubscriptionFeatures;
       message: string;
     }>("/subscription/upgrade", { method: "POST" }),
+
+  // Scoreboard
+  getScoreboard: () => request<ScoreboardResponse>("/scoreboard"),
+
+  getGuruScore: (slug: string) => request<GuruScoreDetail>(`/scoreboard/${slug}`),
 };
 
 export interface SubscriptionFeatures {
@@ -148,4 +153,42 @@ export interface SubscriptionFeatures {
   budget_aware_sizing: boolean;
   portfolio_mirroring: boolean;
   pro_badge: boolean;
+}
+
+// ── Scoreboard types ──────────────────────────────────────────────
+
+export interface TradeScore {
+  trade_id: number;
+  ticker: string;
+  company_name: string;
+  action: "buy" | "sell";
+  price_estimate: string;
+  filing_date: string;
+  result_change_pct: number;
+  is_win: boolean;
+}
+
+export interface GuruScore {
+  guru_id: number;
+  name: string;
+  slug: string;
+  total_trades: number;
+  wins: number;
+  win_rate: number;
+  avg_return_pct: number;
+  best_trade: { ticker: string; pct: number };
+  worst_trade: { ticker: string; pct: number };
+}
+
+export interface GuruScoreDetail extends GuruScore {
+  trades: TradeScore[];
+}
+
+export interface ScoreboardResponse {
+  gurus: GuruScore[];
+  meta: {
+    avg_win_rate: number;
+    top_guru: { name: string; win_rate: number } | null;
+    total_gurus: number;
+  };
 }

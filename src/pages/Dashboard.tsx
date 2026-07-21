@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { useAuth } from "../lib/auth";
-import type { Trade, Guru } from "../lib/api";
+import type { Trade, Guru, GuruScore, ScoreboardResponse } from "../lib/api";
+import { MiniScoreboard } from "./Scoreboard";
 
 interface AlertData {
   alerts: Trade[];
@@ -111,6 +112,7 @@ export default function Dashboard() {
   const [editingBudget, setEditingBudget] = useState(false);
   const [savingBudget, setSavingBudget] = useState(false);
   const [budgetDisplay, setBudgetDisplay] = useState(user?.budget ?? 0);
+  const [scoreboardGurus, setScoreboardGurus] = useState<GuruScore[]>([]);
 
   useEffect(() => {
     setBudgetDisplay(user?.budget ?? 0);
@@ -125,6 +127,21 @@ export default function Dashboard() {
       })
       .catch(() => {});
   }, []);
+
+  // Fetch scoreboard for pro users
+  useEffect(() => {
+    if (!isPro) return;
+    const token = localStorage.getItem("gurustock_token");
+    fetch("/api/scoreboard", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error("Not authorized");
+        return r.json();
+      })
+      .then((data: ScoreboardResponse) => setScoreboardGurus(data.gurus))
+      .catch(() => {});
+  }, [isPro]);
 
   // Fetch alerts
   const fetchAlerts = useCallback(async (guruSlug?: string) => {
@@ -211,6 +228,14 @@ export default function Dashboard() {
             <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500 text-black font-bold uppercase tracking-wide shadow-sm shadow-emerald-500/30">
               Pro
             </span>
+          )}
+          {isPro && (
+            <a
+              href="/scoreboard"
+              className="text-sm text-emerald-400 hover:text-emerald-300 transition font-medium ml-2"
+            >
+              🏆 Scoreboard
+            </a>
           )}
         </div>
         <div className="flex items-center gap-3 md:gap-4">
@@ -380,6 +405,11 @@ export default function Dashboard() {
               : "Set your budget to get position-size recommendations"}
           </p>
         </div>
+
+        {/* ─── Pro: Mini Scoreboard ─── */}
+        {isPro && scoreboardGurus.length > 0 && (
+          <MiniScoreboard gurus={scoreboardGurus} />
+        )}
 
         {/* ─── Guru Filter ─── */}
         <div className="flex items-center gap-2 flex-wrap">
