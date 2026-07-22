@@ -29,7 +29,7 @@ const ENDPOINTS: EndpointInfo[] = [
   { method: "GET", path: "/analytics/consensus", description: "Trades where 2+ gurus agree on same ticker/direction", auth: "optional", rate_limit_tier: "free" },
   { method: "GET", path: "/analytics/trending", description: "Most active tickers across all tracked gurus", auth: "optional", rate_limit_tier: "free" },
   // Market Data
-  { method: "GET", path: "/market/quotes", description: "Price data for requested tickers (trade_estimate fallback)", auth: "optional", rate_limit_tier: "free" },
+  { method: "GET", path: "/market/quotes", description: "Live price data from Yahoo Finance with 5-min cache and trade_estimate fallback", auth: "optional", rate_limit_tier: "free" },
   { method: "GET", path: "/market/sectors", description: "Sector/activity breakdown from guru trade data", auth: "optional", rate_limit_tier: "free" },
   // Docs
   { method: "GET", path: "/", description: "API version info, available endpoints, and rate limits", auth: "none", rate_limit_tier: "unlimited" },
@@ -236,15 +236,15 @@ function generateOpenApiSpec() {
       },
       "/market/quotes": {
         get: {
-          summary: "Quote data",
-          description: "Returns price data for requested tickers. Currently uses trade price_estimate as fallback — live: false indicates no live data yet.",
+          summary: "Live quote data",
+          description: "Returns live price data from Yahoo Finance for requested tickers, with 5-minute caching and graceful fallback to trade price_estimate. live: true indicates real-time Yahoo data.",
           operationId: "getQuotes",
           parameters: [
             { name: "tickers", in: "query", required: true, schema: { type: "string" }, description: "Comma-separated tickers (e.g. AAPL,TSLA)" },
           ],
           responses: {
             "200": {
-              description: "Quote data (stub)",
+              description: "Live quote data with fallback support",
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/Quotes" },
@@ -410,9 +410,17 @@ function generateOpenApiSpec() {
         Quotes: {
           type: "object",
           properties: {
-            live: { type: "boolean" },
+            live: { type: "boolean", description: "Whether all quotes are from Yahoo Finance (live:true) or fallback (live:false)" },
             message: { type: "string" },
             quotes: { type: "array", items: { $ref: "#/components/schemas/Quote" } },
+            errors: { type: "array", items: { type: "object", properties: { ticker: { type: "string" }, error: { type: "string" } } } },
+            meta: {
+              type: "object",
+              properties: {
+                provider: { type: "string" },
+                cache_stats: { type: "object", properties: { size: { type: "integer" }, ttlMs: { type: "integer" }, staleTtlMs: { type: "integer" } } },
+              },
+            },
           },
         },
         Quote: {
@@ -421,7 +429,14 @@ function generateOpenApiSpec() {
             ticker: { type: "string" },
             price: { type: "number", nullable: true },
             price_date: { type: "string", nullable: true },
-            source: { type: "string" },
+            source: { type: "string", enum: ["yahoo", "cache", "fallback", "unavailable"] },
+            dayChange: { type: "number", nullable: true },
+            dayChangePercent: { type: "number", nullable: true },
+            volume: { type: "number", nullable: true },
+            previousClose: { type: "number", nullable: true },
+            marketCap: { type: "number", nullable: true },
+            fiftyTwoWeekHigh: { type: "number", nullable: true },
+            fiftyTwoWeekLow: { type: "number", nullable: true },
           },
         },
         Sectors: {

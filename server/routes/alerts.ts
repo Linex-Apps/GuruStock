@@ -2,7 +2,7 @@
  * Alerts routes — GET /api/alerts
  * Returns recent trades with position sizing recommendation.
  * Free tier: only trades from default guru (warren-buffett), delayed 3 days.
- * Pro tier: all gurus, real-time.
+ * Pro tier: all gurus, real-time + live market prices.
  *
  * Query params:
  *   guru   — filter by guru slug
@@ -13,6 +13,7 @@ import type { Request } from "bun";
 import { sql } from "../db";
 import { extractToken, getUserFromToken, type AuthUser } from "../lib/auth";
 import { generateRationale } from "../lib/rationale";
+import { marketData } from "../lib/market-data";
 
 const DEFAULT_FREE_GURU = "warren-buffett";
 const MAX_POSITION_PCT = 0.05; // 5% of budget per position
@@ -95,25 +96,57 @@ export async function handleAlerts(req: Request): Promise<Response> {
         `;
       }
 
+      // Fetch live market data for Pro users (batch all tickers)
+      let liveQuotes: Map<string, import("../lib/market-data").Quote> | null = null;
+      if (tier === "pro" && trades.length > 0) {
+        const tickers = [...new Set(trades.map((t: any) => t.ticker))];
+        try {
+          liveQuotes = await marketData.getQuotes(tickers);
+        } catch (err) {
+          console.warn("[alerts] Live quote fetch failed:", err);
+          liveQuotes = null;
+        }
+      }
+
       // Add position sizing recommendation + rationale (Pro only)
       const budget = user?.budget ?? 0;
-      const enriched = trades.map((t: Record<string, unknown>) => ({
-        ...t,
-        affordable_shares: calculateAffordableShares(
-          budget,
-          parseFloat(String(t.price_estimate ?? "0"))
-        ),
-        user_budget: budget,
-        rationale: tier === "pro"
-          ? generateRationale({
-              ticker: String(t.ticker ?? ""),
-              company_name: String(t.company_name ?? ""),
-              action: String(t.action ?? "buy") as "buy" | "sell",
-              guru_name: String(t.guru_name ?? ""),
-              guru_slug: String(t.guru_slug ?? ""),
-            })
-          : null,
-      }));
+      const enriched = trades.map((t: Record<string, unknown>) => {
+        const base = {
+          ...t,
+          affordable_shares: calculateAffordableShares(
+            budget,
+            parseFloat(String(t.price_estimate ?? "0"))
+          ),
+          user_budget: budget,
+          rationale: tier === "pro"
+            ? generateRationale({
+                ticker: String(t.ticker ?? ""),
+                company_name: String(t.company_name ?? ""),
+                action: String(t.action ?? "buy") as "buy" | "sell",
+                guru_name: String(t.guru_name ?? ""),
+                guru_slug: String(t.guru_slug ?? ""),
+              })
+            : null,
+        };
+
+        // Pro tier: attach live price data
+        if (tier === "pro" && liveQuotes) {
+          const ticker = String(t.ticker ?? "").toUpperCase();
+          const quote = liveQuotes.get(ticker);
+          if (quote && quote.price != null) {
+            return {
+              ...base,
+              live_price: quote.price,
+              live_change: quote.change,
+              live_change_pct: quote.changePercent,
+              live_volume: quote.volume,
+              live_source: quote.source,
+            };
+          }
+        }
+
+        return base;
+      });
 
       return Response.json({
         alerts: enriched,
@@ -122,6 +155,7 @@ export async function handleAlerts(req: Request): Promise<Response> {
         default_guru: tier === "free" ? DEFAULT_FREE_GURU : null,
         delayed: tier === "free",
         delay_days: tier === "free" ? FREE_TIER_DELAY_DAYS : 0,
+        live_prices: tier === "pro",
       });
     } catch (err) {
       console.error("[alerts] query error:", err);

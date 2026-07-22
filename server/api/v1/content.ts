@@ -10,6 +10,7 @@
 import { sql } from "../../db";
 import { generateRationale } from "../../lib/rationale";
 import { computeScoreboard } from "../../lib/scoreboard";
+import { marketData, type Quote } from "../../lib/market-data";
 import { extractV1Auth, checkRateLimit, v1Response, v1Error, v1RateLimited } from "./_utils";
 
 // ── Response types ──────────────────────────────────────────────────────
@@ -25,6 +26,8 @@ interface DailyBriefResponse {
     rationale: string;
     suggested_hook: string;
     confidence: string;
+    live_price?: number | null;
+    live_change_pct?: number | null;
   }>;
   market_summary: string;
   suggested_hashtags: string[];
@@ -37,7 +40,13 @@ interface VideoScriptResponse {
   script: {
     hook: string;
     body_points: string[];
-    overlay_data: Array<{ ticker: string; action: string; change: string }>;
+    overlay_data: Array<{
+      ticker: string;
+      action: string;
+      change: string;
+      price?: number | null;
+      change_pct?: number | null;
+    }>;
     cta: string;
     estimated_duration_seconds: number;
   };
@@ -53,6 +62,8 @@ interface WeeklyRoundupResponse {
     action: string;
     filing_date: string;
     rationale: string;
+    live_price?: number | null;
+    live_change_pct?: number | null;
   }>;
   scoreboard_changes: Array<{
     guru: string;
@@ -66,7 +77,7 @@ interface WeeklyRoundupResponse {
 
 // ── Hook templates ──────────────────────────────────────────────────────
 
-function generateHook(guruName: string, ticker: string, action: string): string {
+function generateHook(guruName: string, ticker: string, action: string, livePrice?: number | null, liveChangePct?: number | null): string {
   const hooks: Record<string, string[]> = {
     buy: [
       `🚨 ${guruName} just bought MORE ${ticker} — here's why 👇`,
@@ -88,6 +99,19 @@ function generateHook(guruName: string, ticker: string, action: string): string 
   const seed = `${guruName}:${ticker}:${action}`;
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+
+  // If live data available, inject price context into the hook
+  if (livePrice != null && liveChangePct != null) {
+    const direction = liveChangePct >= 0 ? "📈" : "📉";
+    const pctStr = Math.abs(liveChangePct).toFixed(1);
+    const priceHook = `${ticker} now at $${livePrice.toFixed(2)} ${direction}${pctStr}%`;
+    if (action === "buy") {
+      return `${guruName} bought ${ticker} — it's now at $${livePrice.toFixed(2)} ${direction}${pctStr}% since. Worth following?`;
+    } else {
+      return `${guruName} sold ${ticker} — ${priceHook} since. Smart move?`;
+    }
+  }
+
   return options[Math.abs(hash) % options.length];
 }
 
@@ -114,6 +138,24 @@ function generateHashtags(trades: Array<{ ticker: string; guru: string }>): stri
   return [...base, ...tickerTags, ...guruTags];
 }
 
+// ── Live price enrichment helper ────────────────────────────────────────
+
+async function enrichWithLivePrices<T extends { ticker: string }>(
+  items: T[],
+  authTier: string
+): Promise<Map<string, Quote>> {
+  if (authTier === "free") return new Map(); // Free tier: no live prices
+  if (!items.length) return new Map();
+
+  const tickers = [...new Set(items.map((t) => t.ticker))];
+  try {
+    return await marketData.getQuotes(tickers);
+  } catch (err) {
+    console.warn("[content] Live quote fetch failed:", err);
+    return new Map();
+  }
+}
+
 // ── Handlers ────────────────────────────────────────────────────────────
 
 export async function handleContentV1(req: Request): Promise<Response> {
@@ -125,7 +167,7 @@ export async function handleContentV1(req: Request): Promise<Response> {
 
   // GET /api/v1/content/daily-brief
   if (req.method === "GET" && (path === "/daily-brief" || path === "/daily-brief/")) {
-    return handleDailyBrief();
+    return handleDailyBrief(auth.tier);
   }
 
   // GET /api/v1/content/video-script
@@ -135,13 +177,13 @@ export async function handleContentV1(req: Request): Promise<Response> {
     if (!["tiktok", "youtube", "reel"].includes(format)) {
       return v1Error("Invalid format. Use: tiktok, youtube, or reel", 400);
     }
-    return handleVideoScript(guruSlug, format);
+    return handleVideoScript(guruSlug, format, auth.tier);
   }
 
   // GET /api/v1/content/weekly-roundup
   if (req.method === "GET" && (path === "/weekly-roundup" || path === "/weekly-roundup/")) {
     const days = parseInt(url.searchParams.get("days") || "7");
-    return handleWeeklyRoundup(Math.min(days, 90));
+    return handleWeeklyRoundup(Math.min(days, 90), auth.tier);
   }
 
   // GET /api/v1/content/infographic-data
@@ -155,7 +197,7 @@ export async function handleContentV1(req: Request): Promise<Response> {
 
 // ── Daily Brief ─────────────────────────────────────────────────────────
 
-async function handleDailyBrief(): Promise<Response> {
+async function handleDailyBrief(tier: string): Promise<Response> {
   if (!sql) return v1Error("Database unavailable", 503);
 
   try {
@@ -180,22 +222,56 @@ async function handleDailyBrief(): Promise<Response> {
       return v1Response(empty);
     }
 
-    const topTrades = rows.slice(0, 10).map((t: any) => ({
-      guru: t.guru_name,
-      guru_slug: t.guru_slug,
-      ticker: t.ticker,
-      company_name: t.company_name,
-      action: t.action,
-      rationale: generateRationale({
+    // Fetch live prices for all tickers in the brief
+    const tickerList = [...new Set(rows.map((t: any) => t.ticker))];
+    const liveQuotes = await enrichWithLivePrices(
+      tickerList.map((t) => ({ ticker: t })),
+      tier
+    );
+
+    const topTrades = rows.slice(0, 10).map((t: any) => {
+      const ticker = t.ticker;
+      const quote = liveQuotes.get(ticker);
+      const livePrice = quote?.price ?? null;
+      const liveChangePct = quote?.changePercent ?? null;
+
+      // Build rationale with live price context if available
+      let rationale = generateRationale({
         ticker: t.ticker,
         company_name: t.company_name,
         action: t.action,
         guru_name: t.guru_name,
         guru_slug: t.guru_slug,
-      }),
-      suggested_hook: generateHook(t.guru_name, t.ticker, t.action),
-      confidence: t.confidence,
-    }));
+      });
+
+      if (livePrice != null && t.price_estimate != null) {
+        const estimatedPrice = Number(t.price_estimate);
+        const priceDiff = livePrice - estimatedPrice;
+        const pctFromEntry = estimatedPrice > 0
+          ? ((priceDiff / estimatedPrice) * 100).toFixed(1)
+          : null;
+
+        if (pctFromEntry != null) {
+          const direction = priceDiff >= 0 ? "up" : "down";
+          rationale += ` ${t.guru_name} bought ${ticker} at ~$${estimatedPrice.toFixed(2)}; it's now trading at $${livePrice.toFixed(2)} (${direction} ${Math.abs(Number(pctFromEntry))}%).`;
+        }
+      }
+
+      return {
+        guru: t.guru_name,
+        guru_slug: t.guru_slug,
+        ticker,
+        company_name: t.company_name,
+        action: t.action,
+        rationale,
+        suggested_hook: generateHook(t.guru_name, t.ticker, t.action, livePrice, liveChangePct),
+        confidence: t.confidence,
+        ...(tier !== "free" && livePrice != null ? {
+          live_price: livePrice,
+          live_change_pct: liveChangePct,
+        } : {}),
+      };
+    });
 
     // Determine top sector by counting tickers
     const sectorCount: Record<string, number> = {};
@@ -222,7 +298,7 @@ async function handleDailyBrief(): Promise<Response> {
 
 // ── Video Script ────────────────────────────────────────────────────────
 
-async function handleVideoScript(guruSlug: string, format: string): Promise<Response> {
+async function handleVideoScript(guruSlug: string, format: string, tier: string): Promise<Response> {
   if (!sql) return v1Error("Database unavailable", 503);
 
   try {
@@ -259,6 +335,13 @@ async function handleVideoScript(guruSlug: string, format: string): Promise<Resp
       });
     }
 
+    // Fetch live prices for overlay data
+    const tickerList = [...new Set(trades.map((t: any) => t.ticker))];
+    const liveQuotes = await enrichWithLivePrices(
+      tickerList.map((t) => ({ ticker: t })),
+      tier
+    );
+
     // Build script based on format
     const durationMap: Record<string, number> = { tiktok: 30, reel: 30, youtube: 60 };
     const estimatedDuration = durationMap[format] || 30;
@@ -266,23 +349,54 @@ async function handleVideoScript(guruSlug: string, format: string): Promise<Resp
     const hook = `${guruRow.name} just made ${trades.length} moves you NEED to see 👀`;
 
     const bodyPoints = trades.map((t: any, i: number) => {
-      const rationale = generateRationale({
+      const ticker = t.ticker;
+      const quote = liveQuotes.get(ticker);
+      const livePrice = quote?.price;
+
+      let rationale = generateRationale({
         ticker: t.ticker,
         company_name: t.company_name,
         action: t.action,
         guru_name: t.guru_name,
         guru_slug: t.guru_slug,
       });
+
+      // Add live price to rationale for body points
+      if (livePrice != null && t.price_estimate != null && tier !== "free") {
+        const estimatedPrice = Number(t.price_estimate);
+        const pctFromEntry = estimatedPrice > 0
+          ? (((livePrice - estimatedPrice) / estimatedPrice) * 100).toFixed(1)
+          : null;
+        if (pctFromEntry != null) {
+          const direction = Number(pctFromEntry) >= 0 ? "▲" : "▼";
+          rationale += ` [Now $${livePrice.toFixed(2)} ${direction}${Math.abs(Number(pctFromEntry))}% from entry]`;
+        }
+      }
+
       // Truncate rationale for short-form video
-      const short = rationale.length > 150 ? rationale.slice(0, 147) + "..." : rationale;
-      return `${i + 1}. ${t.action.toUpperCase()} ${t.ticker} (${t.company_name.slice(0, 20)}) — ${short}`;
+      const short = rationale.length > 120 ? rationale.slice(0, 117) + "..." : rationale;
+      return `${i + 1}. ${t.action.toUpperCase()} ${ticker} (${t.company_name.slice(0, 20)}) — ${short}`;
     });
 
-    const overlayData = trades.map((t: any) => ({
-      ticker: t.ticker,
-      action: t.action,
-      change: `${t.action === "buy" ? "📈 New Buy" : "📉 New Sell"}`,
-    }));
+    const overlayData = trades.map((t: any) => {
+      const quote = liveQuotes.get(t.ticker);
+      const livePrice = quote?.price ?? null;
+      const liveChangePct = quote?.changePercent ?? null;
+
+      let changeStr = `${t.action === "buy" ? "📈 New Buy" : "📉 New Sell"}`;
+      if (livePrice != null && liveChangePct != null && tier !== "free") {
+        const dir = liveChangePct >= 0 ? "📈" : "📉";
+        changeStr = `${dir} $${livePrice.toFixed(2)} (${liveChangePct >= 0 ? "+" : ""}${liveChangePct.toFixed(2)}%)`;
+      }
+
+      return {
+        ticker: t.ticker,
+        action: t.action,
+        change: changeStr,
+        price: livePrice,
+        change_pct: liveChangePct,
+      };
+    });
 
     // YouTube gets extra detail
     if (format === "youtube") {
@@ -317,7 +431,7 @@ async function handleVideoScript(guruSlug: string, format: string): Promise<Resp
 
 // ── Weekly Roundup ──────────────────────────────────────────────────────
 
-async function handleWeeklyRoundup(days: number): Promise<Response> {
+async function handleWeeklyRoundup(days: number, tier: string): Promise<Response> {
   if (!sql) return v1Error("Database unavailable", 503);
 
   try {
@@ -334,21 +448,38 @@ async function handleWeeklyRoundup(days: number): Promise<Response> {
       ORDER BY t.filing_date DESC
     `;
 
-    const notableTrades = trades.map((t: any) => ({
-      guru: t.guru_name,
-      guru_slug: t.guru_slug,
-      ticker: t.ticker,
-      company_name: t.company_name,
-      action: t.action,
-      filing_date: t.filing_date,
-      rationale: generateRationale({
+    // Fetch live prices
+    const tickerList = [...new Set(trades.map((t: any) => t.ticker))];
+    const liveQuotes = await enrichWithLivePrices(
+      tickerList.map((t) => ({ ticker: t })),
+      tier
+    );
+
+    const notableTrades = trades.map((t: any) => {
+      const quote = liveQuotes.get(t.ticker);
+      const livePrice = quote?.price ?? null;
+      const liveChangePct = quote?.changePercent ?? null;
+
+      return {
+        guru: t.guru_name,
+        guru_slug: t.guru_slug,
         ticker: t.ticker,
         company_name: t.company_name,
         action: t.action,
-        guru_name: t.guru_name,
-        guru_slug: t.guru_slug,
-      }),
-    }));
+        filing_date: t.filing_date,
+        rationale: generateRationale({
+          ticker: t.ticker,
+          company_name: t.company_name,
+          action: t.action,
+          guru_name: t.guru_name,
+          guru_slug: t.guru_slug,
+        }),
+        ...(tier !== "free" && livePrice != null ? {
+          live_price: livePrice,
+          live_change_pct: liveChangePct,
+        } : {}),
+      };
+    });
 
     // Consensus picks: tickers with 2+ gurus trading same direction
     const tickerMap = new Map<string, { buys: string[]; sells: string[] }>();
