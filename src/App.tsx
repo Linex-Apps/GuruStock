@@ -4,6 +4,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
+import Portfolio from "./pages/Portfolio";
 import Upgrade from "./pages/Upgrade";
 import Scoreboard from "./pages/Scoreboard";
 
@@ -57,6 +58,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Scoreboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/portfolio"
+        element={
+          <ProtectedRoute>
+            <Portfolio />
           </ProtectedRoute>
         }
       />

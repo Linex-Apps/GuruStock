@@ -3,6 +3,16 @@ import { useAuth } from "../lib/auth";
 import type { Trade, Guru, GuruScore, ScoreboardResponse } from "../lib/api";
 import { MiniScoreboard } from "./Scoreboard";
 
+interface DriftAlertMini {
+  guru_name: string;
+  guru_slug: string;
+  ticker: string;
+  guru_allocation_pct: number;
+  your_allocation_pct: number;
+  drift_pct: number;
+  action: "add" | "reduce";
+}
+
 interface AlertData {
   alerts: Trade[];
   tier: string;
@@ -114,6 +124,7 @@ export default function Dashboard() {
   const [budgetDisplay, setBudgetDisplay] = useState(user?.budget ?? 0);
   const [scoreboardGurus, setScoreboardGurus] = useState<GuruScore[]>([]);
   const [expandedRationales, setExpandedRationales] = useState<Set<number>>(new Set());
+  const [driftAlerts, setDriftAlerts] = useState<DriftAlertMini[]>([]);
 
   useEffect(() => {
     setBudgetDisplay(user?.budget ?? 0);
@@ -141,6 +152,21 @@ export default function Dashboard() {
         return r.json();
       })
       .then((data: ScoreboardResponse) => setScoreboardGurus(data.gurus))
+      .catch(() => {});
+  }, [isPro]);
+
+  // Fetch drift alerts for pro users (top 2)
+  useEffect(() => {
+    if (!isPro) return;
+    const token = localStorage.getItem("gurustock_token");
+    fetch("/api/portfolio/drift", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error("Not authorized");
+        return r.json();
+      })
+      .then((data: { alerts: DriftAlertMini[] }) => setDriftAlerts(data.alerts.slice(0, 2)))
       .catch(() => {});
   }, [isPro]);
 
@@ -250,6 +276,12 @@ export default function Dashboard() {
               🏆 Scoreboard
             </a>
           )}
+          <a
+            href="/portfolio"
+            className="text-sm text-gray-400 hover:text-gray-200 transition font-medium"
+          >
+            📊 Portfolio
+          </a>
         </div>
         <div className="flex items-center gap-3 md:gap-4">
           <span className="text-xs px-2.5 py-1 rounded-full bg-gray-800 text-gray-400 hidden sm:inline">
@@ -422,6 +454,49 @@ export default function Dashboard() {
         {/* ─── Pro: Mini Scoreboard ─── */}
         {isPro && scoreboardGurus.length > 0 && (
           <MiniScoreboard gurus={scoreboardGurus} />
+        )}
+
+        {/* ─── Pro: Mini Drift Alerts ─── */}
+        {isPro && driftAlerts.length > 0 && (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">📊</span>
+                <h3 className="text-sm font-semibold text-white">Portfolio Drift Alerts</h3>
+              </div>
+              <a
+                href="/portfolio"
+                className="text-xs text-emerald-400 hover:text-emerald-300 transition font-medium"
+              >
+                View All →
+              </a>
+            </div>
+            <div className="space-y-2">
+              {driftAlerts.map((alert, i) => (
+                <div
+                  key={`${alert.guru_slug}-${alert.ticker}-${i}`}
+                  className="flex items-center gap-3 bg-gray-800/50 rounded-lg px-3 py-2"
+                >
+                  <span
+                    className={`text-xs px-1.5 py-0.5 rounded font-bold ${
+                      alert.action === "add"
+                        ? "bg-emerald-900/60 text-emerald-400"
+                        : "bg-red-900/60 text-red-400"
+                    }`}
+                  >
+                    {alert.action === "add" ? "↑" : "↓"}
+                  </span>
+                  <span className="text-sm font-bold text-white">${alert.ticker}</span>
+                  <span className="text-xs text-gray-400">
+                    vs. {alert.guru_name.split(" ")[0]}
+                  </span>
+                  <span className="text-xs text-gray-300 ml-auto tabular-nums">
+                    {alert.drift_pct.toFixed(1)}% drift
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* ─── Guru Filter ─── */}
