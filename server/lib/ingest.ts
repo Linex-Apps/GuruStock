@@ -19,7 +19,7 @@ export interface IngestResult {
  * Ingest trades for a single guru by slug.
  *
  * 1. Looks up the guru in the database
- * 2. Scrapes EDGAR for 13F filings + generates placeholder trades
+ * 2. Scrapes EDGAR for real 13F holdings
  * 3. Inserts new trades, skipping duplicates
  * 4. Returns a summary of what happened
  */
@@ -51,7 +51,7 @@ export async function ingestGuruTrades(guruSlug: string): Promise<IngestResult> 
     return result;
   }
 
-  // Scrape trades from EDGAR (placeholder data for MVP)
+  // Scrape real trades from EDGAR (13F XML parsing)
   let trades: Array<{
     ticker: string;
     companyName: string;
@@ -60,6 +60,7 @@ export async function ingestGuruTrades(guruSlug: string): Promise<IngestResult> 
     priceEstimate: number;
     filingDate: string;
     sourceUrl: string;
+    confidence: "confirmed" | "estimated";
   }>;
 
   try {
@@ -67,6 +68,11 @@ export async function ingestGuruTrades(guruSlug: string): Promise<IngestResult> 
     result.fetched = trades.length;
   } catch (err) {
     result.errors.push(`Scrape failed: ${String(err)}`);
+    return result;
+  }
+
+  if (trades.length === 0) {
+    result.errors.push(`No trades found for ${guruSlug}`);
     return result;
   }
 
@@ -84,7 +90,7 @@ export async function ingestGuruTrades(guruSlug: string): Promise<IngestResult> 
           ${trade.priceEstimate},
           ${trade.filingDate},
           ${trade.sourceUrl},
-          'estimated'
+          ${trade.confidence}
         )
         ON CONFLICT (guru_id, ticker, filing_date) DO NOTHING
         RETURNING id
@@ -118,7 +124,7 @@ export async function ingestAllGurus(): Promise<IngestResult[]> {
 
   let gurus: Array<{ slug: string }>;
   try {
-    gurus = await sql`SELECT slug FROM gurus WHERE is_active = true`;
+    gurus = await sql`SELECT slug FROM gurus WHERE is_active = true` as any;
   } catch (err) {
     console.error("[ingest] Failed to fetch gurus:", err);
     return [];
@@ -126,9 +132,9 @@ export async function ingestAllGurus(): Promise<IngestResult[]> {
 
   const results: IngestResult[] = [];
   for (const guru of gurus) {
-    // Small delay between gurus to respect SEC rate limits (10 req/sec)
+    // Delay between gurus to respect SEC rate limits (10 req/sec)
     if (results.length > 0) {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 500));
     }
     const result = await ingestGuruTrades(guru.slug);
     results.push(result);

@@ -10,6 +10,7 @@ import { handleSubscription } from "./routes/subscription";
 import { handleUser } from "./routes/user";
 import { handleScoreboard } from "./routes/scoreboard";
 import { ingestAllGurus } from "./lib/ingest";
+import { backfill } from "./scripts/backfill";
 
 // CORS headers for development
 function corsHeaders(): HeadersInit {
@@ -124,17 +125,23 @@ export async function initialize() {
   await runMigrations();
   await seedGurus();
 
-  // Initial trade ingestion on startup
+  // Backfill: delete placeholder trades and re-ingest with real 13F data
   try {
-    console.log("[init] Running initial trade ingestion...");
-    await ingestAllGurus();
-    console.log("[init] Initial trade ingestion complete");
+    console.log("[init] Running backfill — clearing placeholder trades and ingesting real 13F data...");
+    await backfill();
+    console.log("[init] Backfill complete");
   } catch (err) {
-    console.error("[init] Initial ingestion failed:", err);
+    console.error("[init] Backfill failed:", err);
+    // Fall back to regular ingestion if backfill fails
+    try {
+      console.log("[init] Falling back to regular ingestion...");
+      await ingestAllGurus();
+    } catch (err2) {
+      console.error("[init] Fallback ingestion also failed:", err2);
+    }
   }
 
   // Periodic re-check every 6 hours for new filings
-  // MVP: just logs "checking..."; real cron wiring is a future task
   startPeriodicCheck();
 }
 
