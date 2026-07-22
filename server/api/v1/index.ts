@@ -8,6 +8,7 @@ import { handleContentV1 } from "./content";
 import { handleAnalyticsV1 } from "./analytics";
 import { handleMarketV1 } from "./market";
 import { handleDocsV1 } from "./docs";
+import { handleWidgetsV1 } from "./widgets";
 import { v1Error } from "./_utils";
 
 export async function handleApiV1(req: Request): Promise<Response> {
@@ -30,6 +31,11 @@ export async function handleApiV1(req: Request): Promise<Response> {
   // Market data endpoints
   if (subPath.startsWith("/market")) {
     return handleMarketV1(req);
+  }
+
+  // Widget endpoints
+  if (subPath.startsWith("/widgets")) {
+    return handleWidgetsV1(req);
   }
 
   // Root and docs

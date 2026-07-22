@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GuruStock Widget Demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    body.light {
+      background: #f8fafc;
+      color: #1e293b;
+    }
+    .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+    h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+    h2 { font-size: 1.25rem; font-weight: 600; margin: 32px 0 16px; }
+    .subtitle { color: #94a3b8; margin-bottom: 32px; font-size: 0.95rem; }
+    body.light .subtitle { color: #64748b; }
+
+    .theme-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+      padding: 12px 16px;
+      background: #1e293b;
+      border-radius: 10px;
+    }
+    body.light .theme-bar { background: #e2e8f0; }
+    .theme-bar label { font-size: 0.85rem; font-weight: 600; }
+    .theme-bar button {
+      padding: 6px 16px;
+      border: 1px solid #334155;
+      background: transparent;
+      color: inherit;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    body.light .theme-bar button { border-color: #cbd5e1; }
+    .theme-bar button.active {
+      background: #10b981;
+      border-color: #10b981;
+      color: white;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+
+    .code-block {
+      background: #1e293b;
+      border-radius: 10px;
+      padding: 16px;
+      overflow-x: auto;
+      margin-top: 12px;
+      position: relative;
+    }
+    body.light .code-block { background: #e2e8f0; }
+    .code-block pre {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 4px 12px;
+      background: #334155;
+      border: none;
+      color: #cbd5e1;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    body.light .copy-btn { background: #cbd5e1; color: #334155; }
+    .copy-btn:hover { opacity: 0.85; }
+
+    .section-desc {
+      font-size: 0.9rem;
+      color: #94a3b8;
+      margin-bottom: 16px;
+    }
+    body.light .section-desc { color: #64748b; }
+
+    footer {
+      text-align: center;
+      padding: 32px 0;
+      color: #475569;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body class="dark">
+  <div class="container">
+    <h1>⚡ GuruStock Widgets</h1>
+    <p class="subtitle">Live guru trade data, embeddable anywhere. Drop a single script tag and a custom element into your page.</p>
+
+    <div class="theme-bar">
+      <label>Theme:</label>
+      <button id="btn-dark" class="active">Dark</button>
+      <button id="btn-light">Light</button>
+      <span style="margin-left:auto;font-size:0.8rem;color:#64748b;">Widgets update live in response</span>
+    </div>
+
+    <!-- Top Trades Widget -->
+    <h2>📊 Top Trades</h2>
+    <p class="section-desc">Latest guru trades with live prices. Filter by guru slug.</p>
+    <div class="demo-grid">
+      <div>
+        <gurustock-widget data-type="top-trades" data-limit="5" data-theme="dark" id="widget-trades"></gurustock-widget>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode(this, 'top-trades')">Copy</button>
+          <pre id="code-top-trades">&lt;script src="https://gurustock.com/widget.js"&gt;&lt;/script&gt;
+&lt;gurustock-widget
+  data-type="top-trades"
+  data-limit="5"
+  data-theme="dark"&gt;
+&lt;/gurustock-widget&gt;</pre>
+        </div>
+      </div>
+      <div>
+        <gurustock-widget data-type="top-trades" data-guru="warren-buffett" data-limit="3" data-theme="dark" id="widget-buffett"></gurustock-widget>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode(this, 'top-trades-guru')">Copy</button>
+          <pre id="code-top-trades-guru">&lt;gurustock-widget
+  data-type="top-trades"
+  data-guru="warren-buffett"
+  data-limit="3"
+  data-theme="dark"&gt;
+&lt;/gurustock-widget&gt;</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scoreboard Mini Widget -->
+    <h2>🏆 Scoreboard Mini</h2>
+    <p class="section-desc">Top 3 gurus by win rate. Compact ranking display.</p>
+    <div class="demo-grid">
+      <div>
+        <gurustock-widget data-type="scoreboard-mini" data-theme="dark" id="widget-scoreboard"></gurustock-widget>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode(this, 'scoreboard-mini')">Copy</button>
+          <pre id="code-scoreboard-mini">&lt;gurustock-widget
+  data-type="scoreboard-mini"
+  data-theme="dark"&gt;
+&lt;/gurustock-widget&gt;</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Consensus Picks Widget -->
+    <h2>🤝 Consensus Picks</h2>
+    <p class="section-desc">Tickers with 2+ gurus trading the same direction.</p>
+    <div class="demo-grid">
+      <div>
+        <gurustock-widget data-type="consensus-picks" data-theme="dark" id="widget-consensus"></gurustock-widget>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode(this, 'consensus-picks')">Copy</button>
+          <pre id="code-consensus-picks">&lt;gurustock-widget
+  data-type="consensus-picks"
+  data-theme="dark"&gt;
+&lt;/gurustock-widget&gt;</pre>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Built with GuruStock API v1 — <a href="https://gurustock.com" style="color:#10b981;">gurustock.com</a>
+    </footer>
+  </div>
+
+  <script src="/widget.js"></script>
+  <script>
+    // Theme switcher
+    const btnDark = document.getElementById("btn-dark");
+    const btnLight = document.getElementById("btn-light");
+
+    function setTheme(theme) {
+      document.body.className = theme;
+      btnDark.classList.toggle("active", theme === "dark");
+      btnLight.classList.toggle("active", theme === "light");
+      // Update all widget themes
+      document.querySelectorAll("gurustock-widget").forEach(w => {
+        w.setAttribute("data-theme", theme);
+      });
+    }
+
+    btnDark.addEventListener("click", () => setTheme("dark"));
+    btnLight.addEventListener("click", () => setTheme("light"));
+
+    // Copy-to-clipboard
+    function copyCode(btn, id) {
+      const pre = document.getElementById("code-" + id);
+      if (!pre) return;
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

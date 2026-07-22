@@ -120,7 +120,14 @@ setInterval(() => {
 // ── Response helpers ────────────────────────────────────────────────────
 
 export function v1Response(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+  const bodyObj = typeof body === "object" && body !== null && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : { data: body };
+  return new Response(JSON.stringify({
+    api_version: "v1",
+    generated_at: new Date().toISOString(),
+    ...bodyObj,
+  }), {
     status,
     headers: {
       "Content-Type": "application/json",

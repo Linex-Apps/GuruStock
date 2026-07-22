@@ -11,6 +11,7 @@ import { sql } from "../../db";
 import { generateRationale } from "../../lib/rationale";
 import { computeScoreboard } from "../../lib/scoreboard";
 import { marketData, type Quote } from "../../lib/market-data";
+import { generateDailyContent } from "../../lib/virlo-pipeline";
 import { extractV1Auth, checkRateLimit, v1Response, v1Error, v1RateLimited } from "./_utils";
 
 // ── Response types ──────────────────────────────────────────────────────
@@ -184,6 +185,11 @@ export async function handleContentV1(req: Request): Promise<Response> {
   if (req.method === "GET" && (path === "/weekly-roundup" || path === "/weekly-roundup/")) {
     const days = parseInt(url.searchParams.get("days") || "7");
     return handleWeeklyRoundup(Math.min(days, 90), auth.tier);
+  }
+
+  // GET /api/v1/content/virlo/daily-package
+  if (req.method === "GET" && (path === "/virlo/daily-package" || path === "/virlo/daily-package/")) {
+    return handleVirloDailyPackage();
   }
 
   // GET /api/v1/content/infographic-data
@@ -595,5 +601,17 @@ async function handleInfographicData(type: string): Promise<Response> {
   } catch (err) {
     console.error("[content/infographic] Error:", err);
     return v1Error("Failed to generate infographic data", 500);
+  }
+}
+
+// ── Virlo Daily Package ─────────────────────────────────────────────────
+
+async function handleVirloDailyPackage(): Promise<Response> {
+  try {
+    const dailyPackage = await generateDailyContent();
+    return v1Response(dailyPackage);
+  } catch (err) {
+    console.error("[content/virlo-daily-package] Error:", err);
+    return v1Error("Failed to generate Virlo daily package", 500);
   }
 }
