@@ -12,6 +12,7 @@
 import type { Request } from "bun";
 import { sql } from "../db";
 import { extractToken, getUserFromToken, type AuthUser } from "../lib/auth";
+import { generateRationale } from "../lib/rationale";
 
 const DEFAULT_FREE_GURU = "warren-buffett";
 const MAX_POSITION_PCT = 0.05; // 5% of budget per position
@@ -93,7 +94,7 @@ export async function handleAlerts(req: Request): Promise<Response> {
         `;
       }
 
-      // Add position sizing recommendation
+      // Add position sizing recommendation + rationale (Pro only)
       const budget = user?.budget ?? 0;
       const enriched = trades.map((t: Record<string, unknown>) => ({
         ...t,
@@ -102,6 +103,15 @@ export async function handleAlerts(req: Request): Promise<Response> {
           parseFloat(String(t.price_estimate ?? "0"))
         ),
         user_budget: budget,
+        rationale: tier === "pro"
+          ? generateRationale({
+              ticker: String(t.ticker ?? ""),
+              company_name: String(t.company_name ?? ""),
+              action: String(t.action ?? "buy") as "buy" | "sell",
+              guru_name: String(t.guru_name ?? ""),
+              guru_slug: String(t.guru_slug ?? ""),
+            })
+          : null,
       }));
 
       return Response.json({

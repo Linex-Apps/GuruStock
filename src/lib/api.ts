@@ -58,6 +58,7 @@ export interface Trade {
   guru_slug?: string;
   affordable_shares?: number;
   user_budget?: number;
+  rationale?: string | null;
 }
 
 export interface AlertResponse {

@@ -113,6 +113,7 @@ export default function Dashboard() {
   const [savingBudget, setSavingBudget] = useState(false);
   const [budgetDisplay, setBudgetDisplay] = useState(user?.budget ?? 0);
   const [scoreboardGurus, setScoreboardGurus] = useState<GuruScore[]>([]);
+  const [expandedRationales, setExpandedRationales] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     setBudgetDisplay(user?.budget ?? 0);
@@ -207,6 +208,18 @@ export default function Dashboard() {
   function startEditing() {
     setBudgetInput(String(budgetDisplay));
     setEditingBudget(true);
+  }
+
+  function toggleRationale(tradeId: number) {
+    setExpandedRationales((prev) => {
+      const next = new Set(prev);
+      if (next.has(tradeId)) {
+        next.delete(tradeId);
+      } else {
+        next.add(tradeId);
+      }
+      return next;
+    });
   }
 
   // Stats
@@ -555,6 +568,68 @@ export default function Dashboard() {
                           )}
                         </div>
                       )}
+
+                      {/* ─── "Why This Trade?" Rationale ─── */}
+                      <div className="mt-3 pt-3 border-t border-gray-800">
+                        {isPro ? (
+                          <>
+                            <button
+                              onClick={() => toggleRationale(trade.id)}
+                              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-emerald-400 transition-colors group"
+                            >
+                              <span className="text-base group-hover:scale-110 transition-transform">
+                                💡
+                              </span>
+                              <span className="font-medium">Why this trade?</span>
+                              <svg
+                                className={`w-3.5 h-3.5 transition-transform duration-300 ${
+                                  expandedRationales.has(trade.id) ? "rotate-180" : ""
+                                }`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 9l-7 7-7-7"
+                                />
+                              </svg>
+                            </button>
+                            <div
+                              className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                                expandedRationales.has(trade.id)
+                                  ? "max-h-96 opacity-100 mt-2"
+                                  : "max-h-0 opacity-0"
+                              }`}
+                            >
+                              {trade.rationale ? (
+                                <p className="text-sm text-gray-400 leading-relaxed bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
+                                  {trade.rationale}
+                                </p>
+                              ) : (
+                                <p className="text-sm text-gray-600 italic">
+                                  No rationale available for this trade.
+                                </p>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => (window.location.href = "/upgrade")}
+                            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-amber-400 transition-colors group w-full text-left"
+                          >
+                            <span className="text-base">🔒</span>
+                            <span className="font-medium">
+                              Why this trade?
+                            </span>
+                            <span className="text-xs text-gray-600 ml-auto">
+                              Upgrade to Pro to unlock AI trade rationale &mdash; $9.99/mo
+                            </span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
