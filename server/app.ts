@@ -9,6 +9,7 @@ import { handleAdmin } from "./routes/admin";
 import { handleSubscription } from "./routes/subscription";
 import { handleUser } from "./routes/user";
 import { handleScoreboard } from "./routes/scoreboard";
+import { handleApiV1 } from "./api/v1/index";
 import { ingestAllGurus } from "./lib/ingest";
 import { backfill } from "./scripts/backfill";
 
@@ -46,6 +47,14 @@ export async function handleApiRequest(req: Request): Promise<Response> {
 
   // Route to handlers
   try {
+    // API v1 — platform API (separate from consumer routes)
+    if (path.startsWith("/api/v1/")) {
+      const inner = await handleApiV1(req);
+      return corsResponse(await inner.text(), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     if (path.startsWith("/api/auth")) {
       const inner = await handleAuth(req);
       return corsResponse(await inner.text(), {
