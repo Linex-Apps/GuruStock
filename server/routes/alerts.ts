@@ -21,7 +21,8 @@ const FREE_TIER_DELAY_DAYS = 3;
 function calculateAffordableShares(budget: number, priceEstimate: number): number {
   if (!budget || !priceEstimate || priceEstimate <= 0) return 0;
   const maxDollars = budget * MAX_POSITION_PCT;
-  return Math.floor((maxDollars / priceEstimate) * 100) / 100; // fractional-share precision
+  // Always return 4-decimal precision for fractional-share support
+  return Math.floor((maxDollars / priceEstimate) * 10000) / 10000;
 }
 
 function optionalAuth(req: Request): { user: AuthUser | null; tier: string } {

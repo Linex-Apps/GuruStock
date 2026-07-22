@@ -40,6 +40,13 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diffDays / 365)}y ago`;
 }
 
+function formatShares(shares: number): { display: string; isFractional: boolean } {
+  if (shares < 1) {
+    return { display: shares.toFixed(2), isFractional: true };
+  }
+  return { display: Math.round(shares).toString(), isFractional: false };
+}
+
 function GuruAvatar({ name }: { name: string }) {
   const initials = name
     .split(" ")
@@ -290,7 +297,7 @@ export default function Dashboard() {
           <span className="text-sm text-gray-400 hidden md:inline">{user?.email}</span>
           <button
             onClick={logout}
-            className="text-sm text-gray-500 hover:text-gray-300 transition"
+            className="text-sm text-gray-500 hover:text-gray-300 transition py-1.5"
           >
             Log out
           </button>
@@ -351,7 +358,7 @@ export default function Dashboard() {
         )}
 
         {/* ─── Stats Cards ─── */}
-        <div className="grid grid-cols-3 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-5 flex flex-col items-center justify-center text-center group hover:border-gray-700 transition-colors duration-200">
             <span className="text-2xl mb-1">📋</span>
             <p className="text-2xl md:text-3xl font-bold text-white tabular-nums">
@@ -433,7 +440,7 @@ export default function Dashboard() {
               </p>
               <button
                 onClick={startEditing}
-                className="text-sm text-gray-500 hover:text-emerald-400 transition underline underline-offset-2"
+                className="text-sm text-gray-500 hover:text-emerald-400 transition underline underline-offset-2 py-1.5"
               >
                 Edit
               </button>
@@ -448,6 +455,15 @@ export default function Dashboard() {
                   maximumFractionDigits: 2,
                 })} per position (5%)`
               : "Set your budget to get position-size recommendations"}
+          </p>
+        </div>
+
+        {/* Fractional shares info banner */}
+        <div className="bg-gray-900/60 border border-emerald-800/30 rounded-xl p-3 flex items-start gap-3">
+          <span className="text-lg shrink-0 mt-0.5">💡</span>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            <span className="text-emerald-400 font-medium">Buying fractional shares?</span>{" "}
+            Most brokerages (Robinhood, Schwab, Fidelity) support them &mdash; you don&rsquo;t need to buy full shares.
           </p>
         </div>
 
@@ -504,7 +520,7 @@ export default function Dashboard() {
           <span className="text-sm text-gray-500 mr-1">Filter:</span>
           <button
             onClick={() => setSelectedGuru("")}
-            className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+            className={`px-3.5 py-2 rounded-full text-sm font-medium transition-all duration-200 min-h-[44px] inline-flex items-center ${
               selectedGuru === ""
                 ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30"
                 : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
@@ -517,7 +533,7 @@ export default function Dashboard() {
               <button
                 key={g.slug}
                 onClick={() => setSelectedGuru(g.slug)}
-                className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                className={`px-3.5 py-2 rounded-full text-sm font-medium transition-all duration-200 min-h-[44px] inline-flex items-center ${
                   selectedGuru === g.slug
                     ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30"
                     : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
@@ -620,22 +636,29 @@ export default function Dashboard() {
                         <div className="mt-3 pt-3 border-t border-gray-800">
                           {trade.affordable_shares !== undefined &&
                           trade.affordable_shares > 0 ? (
-                            <span className="text-sm text-emerald-400 font-medium">
-                              You can afford{" "}
-                              <span className="font-bold">
-                                {trade.affordable_shares.toFixed(2)} shares
-                              </span>{" "}
-                              (~{(
-                                parseFloat(trade.price_estimate) *
-                                (trade.affordable_shares ?? 0)
-                              ).toLocaleString("en-US", {
-                                style: "currency",
-                                currency: "USD",
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                              )
-                            </span>
+                            (() => {
+                              const { display, isFractional } = formatShares(trade.affordable_shares);
+                              const cost = parseFloat(trade.price_estimate) * (trade.affordable_shares ?? 0);
+                              return (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm text-emerald-400 font-medium">
+                                    You can afford{" "}
+                                    <span className="font-bold">{display} shares</span>
+                                    {" "}(~{cost.toLocaleString("en-US", {
+                                      style: "currency",
+                                      currency: "USD",
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })})
+                                  </span>
+                                  {isFractional && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 border border-emerald-800/50 font-medium">
+                                      Fractional shares supported ✅
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()
                           ) : (
                             <span className="text-sm text-gray-600">
                               Price exceeds your 5% position limit
@@ -650,7 +673,7 @@ export default function Dashboard() {
                           <>
                             <button
                               onClick={() => toggleRationale(trade.id)}
-                              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-emerald-400 transition-colors group"
+                              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-emerald-400 transition-colors group py-1.5"
                             >
                               <span className="text-base group-hover:scale-110 transition-transform">
                                 💡
@@ -693,7 +716,7 @@ export default function Dashboard() {
                         ) : (
                           <button
                             onClick={() => (window.location.href = "/upgrade")}
-                            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-amber-400 transition-colors group w-full text-left"
+                            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-amber-400 transition-colors group w-full text-left py-1.5"
                           >
                             <span className="text-base">🔒</span>
                             <span className="font-medium">

@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./lib/auth";
+import OfflineBanner from "./components/OfflineBanner";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -33,8 +34,10 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Landing />} />
+    <>
+      <OfflineBanner />
+      <Routes>
+        <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Landing />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/signup" element={user ? <Navigate to="/dashboard" replace /> : <Signup />} />
       <Route
@@ -70,5 +73,6 @@ export default function App() {
         }
       />
     </Routes>
+    </>
   );
 }
